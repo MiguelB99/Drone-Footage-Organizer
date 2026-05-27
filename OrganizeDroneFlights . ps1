@@ -1,0 +1,95 @@
+# Drone Flight Log Organizer 
+# Author: Miguel B
+# Description: Organizes drone footage into folders by flight date and logs activity.
+#              Reads the actual flight date from DJI filenames (e.g., DJI_20251003155333_...).
+
+# --- SETTINGS ---
+$SourceFolder = "C:\DroneFootage\Unsorted"
+$DestinationFolder = "C:\DroneFootage\Organized"
+$LogFile = "C:\DroneFootage\flight_log.txt"
+
+# File extensions we care about (drone video/photo formats)
+$FileTypes = @("*.mp4", "*.mov", "*.jpg", "*.dng", "*.raw")
+
+# --- SCRIPT START ---
+
+Write-Host "Drone Flight Log Organizer starting..." -ForegroundColor Cyan
+
+# Make sure the source folder exists before doing anything
+if (-not (Test-Path $SourceFolder)) {
+    Write-Host "ERROR: Source folder not found at $SourceFolder" -ForegroundColor Red
+    exit
+}
+
+# Create the destination folder if it doesn't exist yet
+if (-not (Test-Path $DestinationFolder)) {
+    New-Item -Path $DestinationFolder -ItemType Directory | Out-Null
+    Write-Host "Created destination folder: $DestinationFolder" -ForegroundColor Yellow
+}
+
+# Get all drone files from the source folder
+$Files = Get-ChildItem -Path $SourceFolder -Include $FileTypes -Recurse
+
+# If no files found, exit gracefully
+if ($Files.Count -eq 0) {
+    Write-Host "No drone files found to organize." -ForegroundColor Yellow
+    exit
+}
+
+Write-Host "Found $($Files.Count) file(s) to organize." -ForegroundColor Green
+
+# Counter to track how many files we moved
+$MovedCount = 0
+
+# Loop through each file
+foreach ($File in $Files) {
+    # Try to extract the date from the filename (DJI format: DJI_YYYYMMDDhhmmss_...)
+    # The pattern looks for 8 digits in a row (the date portion)
+    if ($File.Name -match '(\d{8})') {
+        $DateString = $matches[1]
+        # Reformat from YYYYMMDD to YYYY-MM-DD
+        $FlightDate = "$($DateString.Substring(0,4))-$($DateString.Substring(4,2))-$($DateString.Substring(6,2))"
+    } else {
+        # Fallback: use the file's creation date if no date found in filename
+        $FlightDate = $File.CreationTime.ToString("yyyy-MM-dd")
+        Write-Host "  (No date in filename for $($File.Name), using creation date)" -ForegroundColor DarkGray
+    }
+    
+    # Build the folder name (e.g., "2025-10-03_Flight")
+    $FlightFolderName = "${FlightDate}_Flight"
+    $FlightFolderPath = Join-Path $DestinationFolder $FlightFolderName
+    
+    # Create the dated folder if it doesn't exist
+    if (-not (Test-Path $FlightFolderPath)) {
+        New-Item -Path $FlightFolderPath -ItemType Directory | Out-Null
+        Write-Host "Created folder: $FlightFolderName" -ForegroundColor Yellow
+    }
+    
+    # Build destination path
+    $Destination = Join-Path $FlightFolderPath $File.Name
+    
+    # Handle name collisions: if the file already exists at destination, add a number
+    $Counter = 1
+    while (Test-Path $Destination) {
+        $NameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
+        $Extension = $File.Extension
+        $NewName = "${NameWithoutExt}_${Counter}${Extension}"
+        $Destination = Join-Path $FlightFolderPath $NewName
+        $Counter++
+    }
+    
+    # Move the file
+    Move-Item -Path $File.FullName -Destination $Destination
+    
+    Write-Host "Moved: $($File.Name) -> $FlightFolderName" -ForegroundColor Green
+    $MovedCount++
+}
+
+# Write a summary entry to the log file
+$Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$LogEntry = "[$Timestamp] Organized $MovedCount file(s) from $SourceFolder"
+Add-Content -Path $LogFile -Value $LogEntry
+
+Write-Host ""
+Write-Host "Done! Organized $MovedCount file(s)." -ForegroundColor Cyan
+Write-Host "Log saved to: $LogFile" -ForegroundColor Cyan
