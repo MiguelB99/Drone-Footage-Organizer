@@ -1,5 +1,5 @@
 # Drone Footage Organizer
-A PowerShell script that automatically organizes DJI drone footage into folders by flight date.
+A PowerShell script that automatically organizes drone footage into folders by flight date.
 ## What It Does
 - Scans a folder of unsorted drone files (videos and photos)
 - Reads the actual flight date from DJI filenames (e.g., DJI_20251003155333_...)
